@@ -42,8 +42,7 @@ Before flashing the firmware, you must configure your MQTT broker credentials in
    const char* mqtt_server   = "your.broker.com";
    const char* mqtt_user     = "your_username";
    const char* mqtt_password = "your_password";
-
-```
+   ```
 
 ### 3. First Boot and WiFi Setup
 
@@ -145,7 +144,3 @@ The device reports intensity using the following Indonesian descriptions:
 * **Merusak:** Destructive (VIII)
 * **Hebat:** Violent (IX)
 * **Ekstrem:** Extreme (X+)
-
-```
-
-```
