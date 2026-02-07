@@ -1,5 +1,5 @@
 /**
- * QuakeAlert ESP32 - V6.8
+ * QuakeAlert ESP32 - V6.9
  * Description: Earthquake detection system using MPU6050 with MQTT reporting,
  * NTP time sync, and IP-based geolocation.
  */
@@ -26,7 +26,7 @@
 // ========================================
 #define WDT_TIMEOUT 30
 const unsigned long UPTIME_RESTART_THRESHOLD = 604800000; // 7 Days
-const char* firmwareVersion = "6.8"; // Fixed version match
+const char* firmwareVersion = "6.9"; // Fixed version match
 const char *StationID = "SEIS-01"; // e.g., SEIS-01, SEIS-02
 
 const unsigned long SOFT_WATCHDOG_LIMIT = 60000; // 60s Loop Timeout
@@ -216,7 +216,7 @@ void checkNtpSync() {
     lastNtpAttempt = now;
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
     struct tm timeinfo;
-    if (getLocalTime(&timeinfo, 100)) {
+    if (getLocalTime(&timeinfo, 2000)) {
         isNtpSynced = true;
         lastNtpSync = now;
         Serial.println("NTP Synced Successfully");
@@ -753,7 +753,7 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                                 digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED) ? LOW : HIGH);
                             }
 
-                            vTaskDelay(10 / portTICK_PERIOD_MS);
+                            vTaskDelay(1 / portTICK_PERIOD_MS);
                         }
                     }
 
@@ -841,6 +841,18 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                         mqttClient.setCallback(mqttCallback);
 
                         initWifi();
+
+                        // 1. Start NTP Sync immediately (starts background task)
+                        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+                        // 2. Wait for WiFi/NTP to stabilize
+                        Serial.println("Stabilizing Network...");
+                        delay(2000);
+                        
+                        // 3. Force Location Update BEFORE main loop starts
+                        // This ensures your MQTT Startup Message has the correct location!
+                        getLokasi();
+
                         initMPU();
 
                         digitalWrite(LED_BUILTIN, LOW);
