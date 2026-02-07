@@ -4,3 +4,4 @@ build/
 *.bin
 *.elf
 *.log
+firmware/secrets.h
