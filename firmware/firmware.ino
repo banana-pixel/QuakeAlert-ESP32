@@ -410,7 +410,7 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
         return false;
     }
 
-    char jsonBuffer[2048];
+    static char jsonBuffer[2048];
     serializeJson(doc, jsonBuffer);
     for (int i = 0; i < 3; i++) {
         if (mqttClient.publish(mqtt_topic_report, jsonBuffer, len)) {
