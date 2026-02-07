@@ -158,6 +158,9 @@ float total = 0;
 float averageMagnitude = 0;
 bool isFirstReading = true;
 
+float stationLat = 0.0;
+float stationLon = 0.0;
+
 // ========================================
 // 6. CORE UTILITIES
 // ========================================
@@ -238,7 +241,7 @@ void getLokasi() {
     bool success = false;
 
     // Primary Provider (ip-api.com)
-    http.begin(client, "http://ip-api.com/json/?fields=country,regionName,city");
+    http.begin(client, "http://ip-api.com/json/?fields=country,regionName,city,lat,lon");
     int httpCode = http.GET();
     if (httpCode == HTTP_CODE_OK) {
         DeserializationError error = deserializeJson(doc, http.getString());
@@ -246,6 +249,12 @@ void getLokasi() {
             city = doc["city"].as<String>();
             region = doc["regionName"].as<String>();
             country = doc["country"].as<String>();
+            
+            // --- ADD THIS SECTION ---
+            stationLat = doc["lat"]; // Save Latitude
+            stationLon = doc["lon"]; // Save Longitude
+            // ------------------------
+
             lokasiAlat = city + ", " + region + ", " + country;
             success = true;
             Serial.println("Lokasi Updated: " + lokasiAlat);
@@ -367,6 +376,8 @@ void sendMqttAlert(String intensity, float pga_value) {
     StaticJsonDocument<512> doc;
     doc["stationId"] = StationID;
     doc["lokasi"] = lokasiAlat;
+    doc["lat"] = stationLat;
+    doc["lon"] = stationLon;
     doc["waktu"] = getWaktuString();
     doc["intensitas"] = intensity;
     doc["pga"] = String(pga_value, 2);
