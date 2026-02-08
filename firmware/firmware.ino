@@ -1,5 +1,5 @@
 /**
- * QuakeAlert ESP32 - V6.9
+ * QuakeAlert ESP32 - V6.9.1
  * Description: Earthquake detection system using MPU6050 with MQTT reporting,
  * NTP time sync, and IP-based geolocation.
  */
@@ -26,7 +26,7 @@
 // ========================================
 #define WDT_TIMEOUT 30
 const unsigned long UPTIME_RESTART_THRESHOLD = 604800000; // 7 Days
-const char* firmwareVersion = "6.9"; // Fixed version match
+const char* firmwareVersion = "6.9.1";
 const char *StationID = "SEIS-01"; // e.g., SEIS-01, SEIS-02
 
 const unsigned long SOFT_WATCHDOG_LIMIT = 60000; // 60s Loop Timeout
@@ -43,7 +43,7 @@ Preferences preferences;
 // ========================================
 // 2. MQTT CONFIGURATION
 // ========================================
-// [SECURITY] CHANGE THESE BEFORE DEPLOYING
+// CHANGE THESE BEFORE DEPLOYING
 const char* mqtt_server   = SECRET_MQTT_SERVER;
 const int   mqtt_port     = SECRET_MQTT_PORT;
 const char* mqtt_user     = SECRET_MQTT_USER;
@@ -76,7 +76,7 @@ const int HTTP_TIMEOUT = 3000;
 const int MPU_ERROR_THRESHOLD_NOTIF = 25;
 const unsigned long WIFI_RECONNECT_INTERVAL = 30000;
 const unsigned long MQTT_RECONNECT_INTERVAL = 5000;
-const unsigned long NTP_SYNC_INTERVAL = 1800000; // 30 Minutes
+const unsigned long NTP_SYNC_INTERVAL = 3600000; // 30 Minutes
 const unsigned long NTP_RETRY_INTERVAL = 60000;  // 1 Minute retry on fail
 
 const char* ntpServer = "id.pool.ntp.org";
@@ -251,8 +251,8 @@ void getLokasi() {
             country = doc["country"].as<String>();
             
             // --- ADD THIS SECTION ---
-            stationLat = doc["lat"]; // Save Latitude
-            stationLon = doc["lon"]; // Save Longitude
+            stationLat = doc["lat"];
+            stationLon = doc["lon"];
             // ------------------------
 
             lokasiAlat = city + ", " + region + ", " + country;
@@ -324,7 +324,7 @@ void IRAM_ATTR DMPDataReady() {
 void initWifi() {
     WiFiManager wm;
     wm.setConfigPortalTimeout(180);
-    // Suggestion: If you want to force reset wifi settings for testing, uncomment below:
+    // If want to force reset wifi settings for testing, uncomment below:
     // wm.resetSettings();
     if (!wm.autoConnect("Quake-Setup")) {
         ESP.restart();
@@ -332,7 +332,6 @@ void initWifi() {
 }
 
 void initMPU() {
-    // FIX: Explicitly define pins for stability
     Wire.begin(SDA_PIN, SCL_PIN);
     Wire.setClock(400000);
     Wire.setTimeOut(3000);
@@ -393,7 +392,6 @@ void sendMqttAlert(String intensity, float pga_value) {
 bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                     String intensitas, String deskripsi) {
     if (!mqttClient.connected()) return false;
-    // Increased buffer size slightly for safety
     DynamicJsonDocument doc(2048);
     doc["stationId"] = StationID;
     doc["lokasi"] = lokasi;
@@ -404,7 +402,7 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
     doc["deskripsi"] = deskripsi;
 
     size_t len = measureJson(doc);
-    // Explicit buffer check
+
     if (len >= 2048) {
         Serial.println("Payload too large for buffer!");
         return false;
@@ -577,7 +575,7 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                         if (!MPUInterrupt) return;
 
                         // MUTEX: 50ms timeout to prevent locking
-                        if (!xSemaphoreTake(i2cMutex, 50 / portTICK_PERIOD_MS)) return;
+                        if (!xSemaphoreTake(i2cMutex, 100 / portTICK_PERIOD_MS)) return;
 
                         MPUInterrupt = false;
 
@@ -621,7 +619,7 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                         float vectorMagnitude = sqrt(pow(aaReal.x, 2) + pow(aaReal.y, 2) + pow(aaReal.z, 2)) * dataRatio;
 
                         // Cold Start Buffer Logic
-                        // We update the buffer, but we REFUSE to trigger events if we are in settling time
+                        // Update the buffer, but we REFUSE to trigger events if we are in settling time
                         bool systemSettling = (millis() < BOOT_SETTLING_TIME);
 
                         // MOVING AVERAGE LOGIC (Drift Fix)
@@ -646,7 +644,6 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                         }
 
                         // Temperature Compensation / Auto-Calibration
-                        // CRITICAL: Done BEFORE cooldown gate to ensure baseline updates
                         static float baselineOffset = 0;
                         static unsigned long lastCalibration = 0;
 
@@ -666,8 +663,6 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                         // If system is settling, stop here. Do not check triggers.
                         if (systemSettling) return;
 
-                        // Cooldown Logic moved AFTER temperature compensation
-                        // This ensures baseline updates even during cooldown
                         if (!eventInProgress && (millis() - lastReportTime < EVENT_COOLDOWN_PERIOD)) return;
 
                         // Use correctedMagnitude for trigger
