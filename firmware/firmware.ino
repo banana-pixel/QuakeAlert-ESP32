@@ -144,6 +144,9 @@ unsigned long lastNtpAttempt = 0;
 unsigned long lastWifiCheck = 0;
 unsigned long lastMqttAttempt = 0;
 
+unsigned long lastHeartbeat = 0;
+const unsigned long HEARTBEAT_INTERVAL = 60000; // 60 Seconds
+
 uint32_t mpuOverflowCount = 0;
 uint32_t totalEventsDetected = 0;
 int mpuErrorCounter = 0;
@@ -395,6 +398,8 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
     DynamicJsonDocument doc(2048);
     doc["stationId"] = StationID;
     doc["lokasi"] = lokasi;
+    doc["lat"] = stationLat;
+    doc["lon"] = stationLon;
     doc["waktu"] = waktu;
     doc["durasi"] = durasi;
     doc["pga"] = pga_str;
@@ -797,6 +802,19 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                         }
                     }
 
+                    void sendHeartbeat() {
+                        if (!mqttClient.connected()) return;
+                        
+                        StaticJsonDocument<256> doc;
+                        doc["stationId"] = StationID;
+                        doc["status"] = "online";
+                        doc["latency"] = String(WiFi.RSSI()) + " dBm"; // Sending Signal Strength as latency/health info
+                        
+                        char jsonBuffer[256];
+                        serializeJson(doc, jsonBuffer);
+                        mqttClient.publish("seismo/heartbeat", jsonBuffer);
+                    }
+
                     // ========================================
                     // 12. SETUP & LOOP
                     // ========================================
@@ -873,6 +891,11 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
 
                         if (mqttClient.connected()) {
                             mqttClient.loop();
+
+                            if (millis() - lastHeartbeat > HEARTBEAT_INTERVAL) {
+                                lastHeartbeat = millis();
+                                sendHeartbeat();
+        }
                         }
 
                         if (rebootRequestReceived) {
