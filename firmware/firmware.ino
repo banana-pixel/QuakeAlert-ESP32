@@ -1,5 +1,5 @@
 /**
- * QuakeAlert ESP32 - V6.9.1
+ * QuakeAlert ESP32 - V6.9.3
  * Description: Earthquake detection system using MPU6050 with MQTT reporting,
  * NTP time sync, and IP-based geolocation.
  */
@@ -20,14 +20,15 @@
 #include <esp_task_wdt.h>
 #include <Preferences.h>
 #include "secrets.h"
+#include "esp_mac.h"
 
 // ========================================
 // 1. SYSTEM CONFIGURATION
 // ========================================
 #define WDT_TIMEOUT 30
 const unsigned long UPTIME_RESTART_THRESHOLD = 604800000; // 7 Days
-const char* firmwareVersion = "6.9.1";
-const char *StationID = "SEIS-01"; // e.g., SEIS-01, SEIS-02
+const char* firmwareVersion = "6.9.3";
+String StationID = "SEIS-01"; // e.g., SEIS-01, SEIS-02
 
 const unsigned long SOFT_WATCHDOG_LIMIT = 60000; // 60s Loop Timeout
 const unsigned long BOOT_SETTLING_TIME = 15000;  // 15s Cold Start Ignore
@@ -36,6 +37,7 @@ const float MAX_FRAGMENTATION_PERCENT = 50.0;    // Restart if frag > 50%
 uint32_t minHeapSeen = 0xFFFFFFFF;
 unsigned long lastHeapCheck = 0;
 volatile unsigned long lastLoopHeartbeat = 0;    // Soft Watchdog Heartbeat
+const long gmtOffset_sec = 7 * 3600;
 
 int bootCount = 0;
 Preferences preferences;
@@ -80,7 +82,6 @@ const unsigned long NTP_SYNC_INTERVAL = 3600000; // 30 Minutes
 const unsigned long NTP_RETRY_INTERVAL = 60000;  // 1 Minute retry on fail
 
 const char* ntpServer = "id.pool.ntp.org";
-const long  gmtOffset_sec = 7 * 3600;
 const int   daylightOffset_sec = 0;
 
 // ========================================
@@ -804,15 +805,25 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
 
                     void sendHeartbeat() {
                         if (!mqttClient.connected()) return;
-                        
+
+                        static unsigned long lastLatency = 0;
+
+                        unsigned long startTimer = millis();
+
                         StaticJsonDocument<256> doc;
                         doc["stationId"] = StationID;
+                        doc["rssi"] = String(WiFi.RSSI()) + " dBm";
                         doc["status"] = "online";
-                        doc["latency"] = String(WiFi.RSSI()) + " dBm"; // Sending Signal Strength as latency/health info
+                        doc["lokasi"] = lokasiAlat;
                         
+                        doc["latency"] = String(lastLatency) + " ms"; 
+
                         char jsonBuffer[256];
                         serializeJson(doc, jsonBuffer);
-                        mqttClient.publish("seismo/heartbeat", jsonBuffer);
+                        
+                        if (mqttClient.publish("seismo/heartbeat", jsonBuffer))
+                            lastLatency = millis() - startTimer;
+                    
                     }
 
                     // ========================================
@@ -820,6 +831,19 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                     // ========================================
                     void setup() {
                         Serial.begin(115200);
+
+                        uint8_t mac[6];
+                        if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+                            char idFormat[16];
+                            // Generate unique 6-character hex string from the last 3 bytes
+                            snprintf(idFormat, sizeof(idFormat), "SEIS-%02X%02X%02X", mac[3], mac[4], mac[5]);
+                            StationID = String(idFormat);
+                        } else {
+                            StationID = "SEIS-UNKNOWN"; // Failsafe
+                        }
+                        
+                        Serial.println("Unique Station ID Assigned: " + StationID);
+
                         pinMode(LED_BUILTIN, OUTPUT);
                         digitalWrite(LED_BUILTIN, HIGH);
 
