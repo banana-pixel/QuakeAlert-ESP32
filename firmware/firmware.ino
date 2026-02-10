@@ -1,5 +1,5 @@
 /**
- * QuakeAlert ESP32 - V6.9.3
+ * QuakeAlert ESP32 - V6.9.4
  * Description: Earthquake detection system using MPU6050 with MQTT reporting,
  * NTP time sync, and IP-based geolocation.
  */
@@ -27,7 +27,7 @@
 // ========================================
 #define WDT_TIMEOUT 30
 const unsigned long UPTIME_RESTART_THRESHOLD = 604800000; // 7 Days
-const char* firmwareVersion = "6.9.3";
+const char* firmwareVersion = "6.9.4";
 String StationID = "SEIS-01"; // e.g., SEIS-01, SEIS-02
 
 const unsigned long SOFT_WATCHDOG_LIMIT = 60000; // 60s Loop Timeout
@@ -37,7 +37,7 @@ const float MAX_FRAGMENTATION_PERCENT = 50.0;    // Restart if frag > 50%
 uint32_t minHeapSeen = 0xFFFFFFFF;
 unsigned long lastHeapCheck = 0;
 volatile unsigned long lastLoopHeartbeat = 0;    // Soft Watchdog Heartbeat
-const long gmtOffset_sec = 7 * 3600;
+const long gmtOffset_sec = 0;
 
 int bootCount = 0;
 Preferences preferences;
@@ -195,11 +195,11 @@ void monitorHeap() {
 }
 
 String getWaktuString() {
-    if (!isNtpSynced) return "Sinkronisasi Waktu Gagal";
+    if (!isNtpSynced) return "N/A";
     struct tm timeinfo;
-    if(!getLocalTime(&timeinfo)){ return "Gagal mengambil waktu lokal"; }
-    char timeStringBuff[50];
-    strftime(timeStringBuff, sizeof(timeStringBuff), "%d-%m-%Y %H:%M:%S WIB", &timeinfo);
+    if(!getLocalTime(&timeinfo)){ return "N/A"; }
+    char timeStringBuff[30];
+    strftime(timeStringBuff, sizeof(timeStringBuff), "%Y-%m-%d %H:%M:%S", &timeinfo);
     return String(timeStringBuff);
 }
 
