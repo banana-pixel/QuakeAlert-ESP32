@@ -266,7 +266,7 @@ void getLokasi() {
     }
     http.end();
 
-    // Fallback Provider (ipinfo.io)
+    // Fallback Provider (ipinfo.io) – also set lat/lon so geo is not 0,0
     if (!success) {
         http.begin(client, "http://ipinfo.io/json");
         httpCode = http.GET();
@@ -277,6 +277,15 @@ void getLokasi() {
                 region = doc["region"].as<String>();
                 country = doc["country"].as<String>();
                 lokasiAlat = city + ", " + region + ", " + country;
+                // ipinfo.io returns "loc": "lat,lon" – parse so alerts/reports have real geo (not 0,0)
+                if (!doc["loc"].isNull()) {
+                    String loc = doc["loc"].as<String>();
+                    int comma = loc.indexOf(',');
+                    if (comma > 0) {
+                        stationLat = loc.substring(0, comma).toFloat();
+                        stationLon = loc.substring(comma + 1).toFloat();
+                    }
+                }
                 success = true;
                 Serial.println("Lokasi Updated (Fallback): " + lokasiAlat);
             }
