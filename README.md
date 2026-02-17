@@ -34,15 +34,18 @@ Ensure the following libraries are installed in your Arduino IDE or PlatformIO e
 * `MPU6050` (ElectronicCats/mpu6050)
 
 ### 2. MQTT Credentials Setup
-Before flashing the firmware, you must configure your MQTT broker credentials in the source code.
-1. Open `src/firmware.ino`.
-2. Navigate to the "MQTT CONFIGURATION" section (approximately line 45).
-3. Update the following variables with your broker details:
-   ```cpp
-   const char* mqtt_server   = "your.broker.com";
-   const char* mqtt_user     = "your_username";
-   const char* mqtt_password = "your_password";
+Before flashing the firmware, you must configure your MQTT broker credentials.
+
+1. Copy the example secrets file and edit it with your real values (do **not** commit `secrets.h`):
+   ```bash
+   cp firmware/secrets.h.example firmware/secrets.h
    ```
+2. Edit `firmware/secrets.h` and set:
+   - `SECRET_MQTT_SERVER` — your broker hostname (e.g. `quakealert.example.com`)
+   - `SECRET_MQTT_PORT` — usually `1883`
+   - `SECRET_MQTT_USER` and `SECRET_MQTT_PASS` — must match the server's MQTT user/password (see QuakeAlert-Server `.env` and `config/pwfile`)
+
+`secrets.h` is listed in `.gitignore`; never commit it or push it to the repo.
 
 ### 3. First Boot and WiFi Setup
 
