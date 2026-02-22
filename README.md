@@ -33,6 +33,16 @@ Ensure the following libraries are installed in your Arduino IDE or PlatformIO e
 * `ArduinoJson` by Benoit Blanchon
 * `MPU6050` (ElectronicCats/mpu6050)
 
+**Building with PlatformIO (recommended):** This repo includes a `platformio.ini` at the root. From the repo root, run:
+```bash
+cp firmware/secrets.h.example firmware/secrets.h
+# Edit firmware/secrets.h with your MQTT credentials, then:
+pio run
+pio run -t upload    # to flash the ESP32
+pio device monitor   # to open serial monitor
+```
+Install PlatformIO first: `pip install platformio` or use the [PlatformIO IDE](https://platformio.org/).
+
 ### 2. MQTT Credentials Setup
 Before flashing the firmware, you must configure your MQTT broker credentials.
 
@@ -93,13 +103,14 @@ Published after a seismic event concludes. Contains a summary of the event.
   "waktu": "06-02-2026 18:30:00 WIB",
   "durasi": 45.5,
   "pga": "15.40 gal",
-  "intensitas": "IV (Ringan)",
-  "deskripsi": "Jendela/pintu berderik."
+  "intensitas": "IV (Ringan)"
 }
 
 ```
 
 
+
+  Intensity descriptions (MMI effects) are derived by the Android app from `intensitas` for localization.
 
 #### seismo/status
 
@@ -128,7 +139,6 @@ The device uses Indonesian terms for JSON data fields and status messages. Below
 * `waktu`: Time (Format: DD-MM-YYYY HH:MM:SS WIB)
 * `intensitas`: Intensity (Modified Mercalli Scale)
 * `durasi`: Duration (in seconds)
-* `deskripsi`: Description of the intensity level
 
 ### Time Zone
 

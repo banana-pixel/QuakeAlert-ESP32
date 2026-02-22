@@ -314,19 +314,6 @@ String toIntensity(float pga_val) {
     return "X+ (Ekstrem)";
 }
 
-String getMmiDescription(String intensity) {
-    if (intensity.startsWith("I ")) return "Hanya tercatat instrumen.";
-    if (intensity.startsWith("II-III")) return "Dirasakan orang diam di atas.";
-    if (intensity.startsWith("IV ")) return "Jendela/pintu berderik.";
-    if (intensity.startsWith("V ")) return "Barang ringan terpelanting.";
-    if (intensity.startsWith("VI ")) return "Plester dinding retak.";
-    if (intensity.startsWith("VII ")) return "Sulit berdiri, kerusakan ringan.";
-    if (intensity.startsWith("VIII ")) return "Dinding lepas, cerobong roboh.";
-    if (intensity.startsWith("IX ")) return "Kerusakan hebat, pondasi geser.";
-    if (intensity.startsWith("X+ ")) return "Hancur total.";
-    return "Tidak ada data.";
-}
-
 void IRAM_ATTR DMPDataReady() {
     MPUInterrupt = true;
 }
@@ -403,9 +390,9 @@ void sendMqttAlert(String intensity, float pga_value) {
 }
 
 bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
-                    String intensitas, String deskripsi) {
+                    String intensitas) {
     if (!mqttClient.connected()) return false;
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(1536);
     doc["stationId"] = StationID;
     doc["lokasi"] = lokasi;
     doc["lat"] = stationLat;
@@ -414,16 +401,15 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
     doc["durasi"] = durasi;
     doc["pga"] = pga_str;
     doc["intensitas"] = intensitas;
-    doc["deskripsi"] = deskripsi;
 
     size_t len = measureJson(doc);
 
-    if (len >= 2048) {
+    if (len >= 1536) {
         Serial.println("Payload too large for buffer!");
         return false;
     }
 
-    static char jsonBuffer[2048];
+    static char jsonBuffer[1536];
     serializeJson(doc, jsonBuffer);
     for (int i = 0; i < 3; i++) {
         if (mqttClient.publish(mqtt_topic_report, jsonBuffer, len)) {
@@ -575,7 +561,7 @@ bool sendMqttReport(String lokasi, String waktu, float durasi, String pga_str,
                             lastIntensity = intensity;
 
                             bool success = sendMqttReport(lokasiAlat, lastEventTime, reportDuration,
-                                                          String(lastPgaStr), lastIntensity, getMmiDescription(intensity));
+                                                          String(lastPgaStr), lastIntensity);
                             if (success) totalEventsDetected++;
 
                             portENTER_CRITICAL(&reportMux);
