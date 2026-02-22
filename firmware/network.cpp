@@ -158,14 +158,18 @@ void sendHeartbeat() {
     static unsigned long lastLatency = 0;
     unsigned long startTimer = millis();
 
-    StaticJsonDocument<256> doc;
+    StaticJsonDocument<320> doc;
     doc["stationId"] = StationID;
     doc["rssi"] = String(WiFi.RSSI()) + " dBm";
     doc["status"] = "online";
     doc["lokasi"] = lokasiAlat;
     doc["latency"] = String(lastLatency) + " ms";
+    if (stationLat != 0.0f || stationLon != 0.0f) {
+        doc["lat"] = stationLat;
+        doc["lon"] = stationLon;
+    }
 
-    char jsonBuffer[256];
+    char jsonBuffer[320];
     serializeJson(doc, jsonBuffer);
 
     if (mqttClient.publish("seismo/heartbeat", jsonBuffer))
