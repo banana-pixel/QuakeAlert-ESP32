@@ -11,6 +11,20 @@ This project is a heavily modified fork of **[QuakeCord](https://github.com/Know
     * Added NTP time synchronization and automatic clock drift compensation.
     * Implemented automatic baseline calibration for temperature drift.
 
+## Project Structure
+
+The firmware is split into modules for maintainability:
+
+| File | Purpose |
+|------|---------|
+| `firmware.ino` | Main entry, setup/loop, task creation, alert glue |
+| `config.h` | Constants, pins, detection thresholds |
+| `state.h` | Shared global variables and structures |
+| `utils.h/cpp` | Heap monitoring, time formatting |
+| `network.h/cpp` | WiFi, NTP, geolocation, heartbeat |
+| `sensor.h/cpp` | MPU6050 init, detection logic, intensity scale |
+| `mqtt.h/cpp` | MQTT publish, callbacks, connection handling |
+
 ## License
 Licensed under the GNU Affero General Public License v3.0 (AGPL v3). See the LICENSE file for full text.
 
