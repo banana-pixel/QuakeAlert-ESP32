@@ -218,13 +218,19 @@ void setup() {
     preferences.end();
 
     lastLoopHeartbeat = millis();
+    esp_task_wdt_deinit();
+#ifdef USE_LEGACY_WDT
+    /* PlatformIO bundled framework: 2-arg API */
+    esp_task_wdt_init(WDT_TIMEOUT, true);
+#else
+    /* Arduino IDE 3.3.6: config struct API */
     esp_task_wdt_config_t twdt_config = {
         .timeout_ms = WDT_TIMEOUT * 1000,
         .idle_core_mask = (1 << 0) | (1 << 1),
         .trigger_panic = true
     };
-    esp_task_wdt_deinit();
     esp_task_wdt_init(&twdt_config);
+#endif
     esp_task_wdt_add(NULL);
 
     i2cMutex = xSemaphoreCreateMutex();
