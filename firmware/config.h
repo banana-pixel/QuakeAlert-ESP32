@@ -29,15 +29,23 @@
 #define MQTT_TOPIC_STATUS  "seismo/status"
 
 // ========================================
-// 3. DETECTION CONFIGURATION
+// 3. DETECTION CONFIGURATION (STA/LTA)
 // ========================================
-#define TRIGGER_THRESHOLD 8.0f
-#define SUSTAIN_THRESHOLD 4.0f
-#define CONFIRMATION_DURATION_MS 1000
-#define MAX_EVENT_DURATION_MS 60000
-#define EVENT_COOLDOWN_PERIOD_MS 60000
-#define MOVING_AVERAGE_WINDOW_SIZE 5
-#define DATA_RATIO (980.0f / 8192.0f)
+// STA/LTA: Short-Term/Long-Term Average ratio algorithm.
+//   STA tracks instantaneous shaking energy (fast window).
+//   LTA tracks the ambient noise floor    (slow window).
+//   A spike in STA/LTA reliably identifies a seismic onset,
+//   adapting automatically to local background noise level.
+#define STA_ALPHA               (1.0f / 50.0f)    // STA window: ~0.5 s at 100 Hz
+#define LTA_ALPHA               (1.0f / 2000.0f)  // LTA window: ~20 s at 100 Hz
+#define STA_LTA_TRIGGER_RATIO   3.5f              // STA/LTA ratio to open event
+#define STA_LTA_DETRIGGER_RATIO 1.5f              // STA/LTA ratio to close event
+#define MIN_STA_THRESHOLD_GAL   1.5f              // Minimum STA (gal) — suppresses noise triggers
+#define CONFIRMATION_DURATION_MS 300              // ms STA/LTA must stay triggered before confirming
+#define MAX_EVENT_DURATION_MS   60000             // Maximum event duration cap (ms)
+#define EVENT_COOLDOWN_PERIOD_MS 60000            // Minimum gap between reported events (ms)
+#define LTA_WARMUP_TIME_MS      45000             // Boot time before detection activates (ms)
+#define DATA_RATIO (980.665f / 8192.0f)           // Standard gravity: 1g = 980.665 gal; ±4g -> 8192 LSB/g
 
 // ========================================
 // 4. TIMING & STABILITY

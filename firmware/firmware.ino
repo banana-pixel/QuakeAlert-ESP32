@@ -96,11 +96,6 @@ char lastPgaStr[16] = "N/A";
 String lastIntensity = "N/A";
 String lastEventTime = "N/A";
 
-float readings[MOVING_AVERAGE_WINDOW_SIZE];
-int readIndex = 0;
-float total = 0;
-float averageMagnitude = 0;
-bool isFirstReading = true;
 
 float stationLat = 0.0;
 float stationLon = 0.0;
@@ -239,7 +234,6 @@ void setup() {
         ESP.restart();
     }
 
-    for (int i = 0; i < MOVING_AVERAGE_WINDOW_SIZE; i++) readings[i] = 0.0f;
 
     mqttClient.setServer(mqtt_server, mqtt_port);
     mqttClient.setBufferSize(2048);

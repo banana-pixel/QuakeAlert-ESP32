@@ -122,14 +122,7 @@ extern char lastPgaStr[16];
 extern String lastIntensity;
 extern String lastEventTime;
 
-// ========================================
-// MOVING AVERAGE STATE
-// ========================================
-extern float readings[MOVING_AVERAGE_WINDOW_SIZE];
-extern int readIndex;
-extern float total;
-extern float averageMagnitude;
-extern bool isFirstReading;
+
 
 // ========================================
 // GEO
