@@ -390,11 +390,16 @@ void sendHeartbeat() {
     doc["lokasi"]    = lokasi;
     doc["latency"]   = latencyText;
 
-    // Mask to 2 decimal places before publishing.
-    // Full-precision values remain untouched in stationLat / stationLon.
+    // Mask to 2 decimal places, then format as a strict string to avoid
+    // IEEE-754 binary approximation artifacts when ArduinoJson serializes
+    // a raw float (e.g. -6.15 → "-6.150000095").
     if (stationLat != 0.0f || stationLon != 0.0f) {
-        doc["lat"] = maskCoord(stationLat);
-        doc["lon"] = maskCoord(stationLon);
+        char latStr[16];
+        char lonStr[16];
+        snprintf(latStr, sizeof(latStr), "%.2f", maskCoord(stationLat));
+        snprintf(lonStr, sizeof(lonStr), "%.2f", maskCoord(stationLon));
+        doc["lat"] = latStr;
+        doc["lon"] = lonStr;
     }
 
     char jsonBuffer[MQTT_HEARTBEAT_BUFFER_SIZE];
