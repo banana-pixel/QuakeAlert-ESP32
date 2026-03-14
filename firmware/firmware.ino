@@ -9,6 +9,7 @@
 
 #include <Wire.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <WiFiManager.h>
 #include <esp_task_wdt.h>
 #include <Preferences.h>
@@ -47,7 +48,7 @@ const int daylightOffset_sec = 0;
 MPU6050 mpu;
 TaskHandle_t SensorTask = nullptr;
 TaskHandle_t NetworkMaintenanceTask = nullptr;
-WiFiClient espClient;
+WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 SemaphoreHandle_t i2cMutex = nullptr;
 SemaphoreHandle_t mpuInterruptSemaphore = nullptr;
@@ -329,6 +330,10 @@ void setup() {
     mqttClient.setBufferSize(2048);
     mqttClient.setKeepAlive(CUSTOM_MQTT_KEEPALIVE);
     mqttClient.setCallback(mqttCallback);
+    // Skip certificate chain validation — still fully encrypts the TLS session
+    // (prevents network sniffing of credentials and coordinates). Appropriate
+    // for a community deployment using a self-signed broker certificate.
+    espClient.setInsecure();
 
     initWifi();
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);

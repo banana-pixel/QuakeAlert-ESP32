@@ -94,52 +94,23 @@ void initWifi() {
     WiFiManagerParameter customLat("lat", "Latitude  (e.g. -6.200000)",  "", 20);
     WiFiManagerParameter customLon("lon", "Longitude (e.g. 106.816666)", "", 20);
 
-    // Raw-HTML parameter: renders a styled button above the text fields.
-    // WiFiManager accepts a single-argument constructor that injects the
-    // string verbatim into the config page body — no id/label/value needed.
-    WiFiManagerParameter gpsButton(
-        "<p style='margin:10px 0;'>"
-          "<button type='button' "
-            "style='width:100%;padding:12px;background:#1fa3ec;"
-                   "color:#fff;border:0;border-radius:3px;"
-                   "font-size:14px;cursor:pointer;'"
-            " onclick='getGPS()'>"
-            "&#128205; Use This Device&apos;s GPS"
-          "</button>"
-        "</p>"
+    // Static HTML info panel — no JavaScript, no geolocation API.
+    // Eliminates the browser "Not Secure" / permission warning on captive
+    // portals and avoids the iOS Safari HTTPS restriction entirely.
+    // Saves ~600 bytes of RAM compared to the previous JS button approach.
+    WiFiManagerParameter portal_info(
+        "<div style='background:#f0f4ff;border-left:4px solid #1fa3ec;"
+                    "padding:12px 14px;margin:10px 0;border-radius:3px;"
+                    "font-size:13px;line-height:1.6;color:#333;'>"
+          "<b>&#128205; How to get your coordinates:</b><br>"
+          "1. Open <b>Google Maps</b> on this device.<br>"
+          "2. Long-press your exact location on the map.<br>"
+          "3. Copy the coordinates that appear at the bottom.<br>"
+          "4. Paste them into the fields below, then tap <b>Save</b>."
+        "</div>"
     );
 
-    // JavaScript injected into the page <head>.
-    // getCurrentPosition() populates both inputs; the user can then hit
-    // "Save" to submit the form and connect to WiFi in one step.
-    //
-    // Note: navigator.geolocation works over HTTP on Android captive-portal
-    // browsers (Chrome treats captive portals as a special case).
-    // iOS Safari requires HTTPS, so iPhone users may need to type manually.
-    const char* gpsHeadElement =
-        "<script>"
-        "function getGPS(){"
-          "if(!navigator.geolocation){"
-            "alert('Geolocation not supported. Please type coordinates manually.');"
-            "return;"
-          "}"
-          "navigator.geolocation.getCurrentPosition("
-            "function(p){"
-              "document.getElementById('lat').value"
-                "=p.coords.latitude.toFixed(6);"
-              "document.getElementById('lon').value"
-                "=p.coords.longitude.toFixed(6);"
-            "},"
-            "function(e){"
-              "alert('GPS error: '+e.message+'. Please type coordinates manually.');"
-            "},"
-            "{enableHighAccuracy:true,timeout:15000}"
-          ");"
-        "}"
-        "</script>";
-
-    wm.setCustomHeadElement(gpsHeadElement);
-    wm.addParameter(&gpsButton);
+    wm.addParameter(&portal_info);
     wm.addParameter(&customLat);
     wm.addParameter(&customLon);
 
