@@ -9,7 +9,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <PubSubClient.h>
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include "config.h"
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -37,7 +37,7 @@ extern const int daylightOffset_sec;
 extern MPU6050 mpu;
 extern TaskHandle_t SensorTask;
 extern TaskHandle_t NetworkMaintenanceTask;
-extern WiFiClient espClient;
+extern WiFiClientSecure espClient;
 extern PubSubClient mqttClient;
 extern SemaphoreHandle_t i2cMutex;
 extern SemaphoreHandle_t mpuInterruptSemaphore;
