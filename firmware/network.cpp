@@ -307,6 +307,7 @@ void networkMaintenanceTask(void* pvParameters) {
     (void)pvParameters;
 
     Serial.println("Network Maintenance Task running on Core 1");
+    // Ensure the Task Watchdog monitors this thread so it catches any deadlocks
     esp_task_wdt_add(nullptr);
 
     for (;;) {

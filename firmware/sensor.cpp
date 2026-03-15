@@ -105,11 +105,19 @@ void processSensorData() {
         return;
     }
 
-    if (mpu.dmpGetCurrentFIFOPacket(FIFOBuffer) == 0) {
         mpuErrorCounter++;
         if (mpuErrorCounter > MPU_ERROR_THRESHOLD_NOTIF) {
             Serial.println("MPU read errors exceeded threshold. Resetting FIFO...");
             mpu.resetFIFO();
+            
+            // Critical fix: reset STA/LTA variables so mathematical algorithms don't glitch 
+            extern float sta;
+            extern float lta;
+            extern float baselineEMA;
+            sta = 0.0f;
+            lta = MIN_LTA_CLAMP;
+            baselineEMA = 0.0f;
+            
             mpuErrorCounter = 0;
         }
         xSemaphoreGive(i2cMutex);
@@ -121,6 +129,9 @@ void processSensorData() {
     mpu.dmpGetGravity(&gravity, &q);
     mpu.dmpGetAccel(&aa, FIFOBuffer);
     mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+    
+    // EXTREMELY IMPORTANT: Release I2C mutex BEFORE doing all the heavy sqrtf and fabsf math below. 
+    // This allows the bus and other threads to operate while this thread does 100+ operations.
     xSemaphoreGive(i2cMutex);
 
     // --- 1. Vector Magnitude (direct multiply — avoids slow powf()) ---
