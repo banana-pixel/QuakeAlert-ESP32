@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <HTTPClient.h>
 
 // ============================================================
 // Internal helpers (anonymous namespace — translation-unit scope)
@@ -80,109 +81,36 @@ void clearLocationCoordinates() {
 }  // namespace
 
 // ============================================================
-// initWifi — WiFiManager portal with HTML5 GPS capture
+// initWifi — WiFiManager portal with simple credentials
 // ============================================================
 void initWifi() {
     WiFiManager wm;
     wm.setConfigPortalTimeout(180);
 
-    // -----------------------------------------------------------------
-    // Custom form fields.
-    // The parameter id ("lat" / "lon") becomes the HTML <input id="…">
-    // which the injected JavaScript targets with getElementById().
-    // -----------------------------------------------------------------
-    WiFiManagerParameter customLat("lat", "Latitude  (e.g. -6.200000)",  "", 20);
-    WiFiManagerParameter customLon("lon", "Longitude (e.g. 106.816666)", "", 20);
-
-    // Static HTML info panel — no JavaScript, no geolocation API.
-    // Eliminates the browser "Not Secure" / permission warning on captive
-    // portals and avoids the iOS Safari HTTPS restriction entirely.
-    // Saves ~600 bytes of RAM compared to the previous JS button approach.
+    // Static HTML info panel explaining the automated process
     WiFiManagerParameter portal_info(
         "<div style='background:#f0f4ff;border-left:4px solid #1fa3ec;"
                     "padding:12px 14px;margin:10px 0;border-radius:3px;"
                     "font-size:13px;line-height:1.6;color:#333;'>"
-          "<b>&#128205; How to get your coordinates:</b><br>"
-          "1. Open <b>Google Maps</b> on this device.<br>"
-          "2. Long-press your exact location on the map.<br>"
-          "3. Copy the coordinates that appear at the bottom.<br>"
-          "4. Paste them into the fields below, then tap <b>Save</b>."
+          "<b>&#128205; Automatic Geolocation Setup</b><br>"
+          "Just connect to your home WiFi. This device will scan "
+          "nearby router signals to determine its location automatically."
         "</div>"
     );
 
     wm.addParameter(&portal_info);
-    wm.addParameter(&customLat);
-    wm.addParameter(&customLon);
 
-    // -----------------------------------------------------------------
-    // Force Portal on Missing Data
-    //
-    // Before attempting any WiFi connection, peek at NVS to check whether
-    // GPS coordinates have ever been saved.  Two cases:
-    //
-    //   lat == 0.0f  → first boot or after factory reset; no location data.
-    //                  We MUST force the AP portal open even if the device
-    //                  already has a saved WiFi password, so the user can
-    //                  enter their coordinates.  startConfigPortal() does this.
-    //
-    //   lat != 0.0f  → location already stored; a silent background
-    //                  reconnect is sufficient.  autoConnect() skips the
-    //                  portal if the saved credentials still work.
-    // -----------------------------------------------------------------
-    {
-        Preferences peekPrefs;
-        peekPrefs.begin("quake-app", true);   // read-only
-        const float savedLat = peekPrefs.getFloat("lat", 0.0f);
-        peekPrefs.end();
+    // If no WiFi credentials exist (or reset button was pushed), start AP
+    bool portalSuccess = wm.autoConnect("Quake-Setup");
 
-        bool portalSuccess = false;
-        if (savedLat == 0.0f) {
-            Serial.println("No GPS location in NVS — forcing config portal...");
-            portalSuccess = wm.startConfigPortal("Quake-Setup");
-        } else {
-            portalSuccess = wm.autoConnect("Quake-Setup");
-        }
-
-        if (!portalSuccess) {
-            Serial.println("WiFiManager connect/portal failed. Continuing in degraded mode.");
-            setLocationStatusWifiDisconnected();
-            clearLocationCoordinates();
-            return;
-        }
+    if (!portalSuccess) {
+        Serial.println("WiFiManager connect/portal failed. Continuing in degraded mode.");
+        setLocationStatusWifiDisconnected();
+        clearLocationCoordinates();
+        return;
     }
 
     Serial.println("WiFi connected.");
-
-    // -----------------------------------------------------------------
-    // Persist lat/lon to NVS only when the user actively filled them in
-    // (i.e. the portal was shown and the fields are non-empty).
-    // On subsequent boots where autoConnect() is used and no portal is
-    // shown, getValue() returns "" — we skip the write safely.
-    // -----------------------------------------------------------------
-    const char* latStr = customLat.getValue();
-    const char* lonStr = customLon.getValue();
-
-    if (latStr != nullptr && lonStr != nullptr &&
-        latStr[0] != '\0' && lonStr[0] != '\0') {
-
-        const float lat = strtof(latStr, nullptr);
-        const float lon = strtof(lonStr, nullptr);
-
-        // Guard against accidental null-island (0, 0) submissions
-        if (lat != 0.0f || lon != 0.0f) {
-            Preferences prefs;
-            prefs.begin("quake-app", false);  // read-write
-            prefs.putFloat("lat", lat);
-            prefs.putFloat("lon", lon);
-            prefs.end();
-
-            Serial.printf(
-                "Location saved from portal: %.6f, %.6f\n",
-                static_cast<double>(lat),
-                static_cast<double>(lon)
-            );
-        }
-    }
 }
 
 // ============================================================
@@ -262,42 +190,97 @@ void checkNtpSync() {
 }
 
 // ============================================================
-// refreshLocation — NVS-backed, zero HTTP traffic
+// refreshLocation — Auto-Geolocation via Google APIs
 //
-// Reads the lat/lon saved by initWifi() (or a previous session) from
-// the "quake-app" NVS namespace and populates the global state.
-// If no location has ever been saved, logs a message and returns false
-// so the caller can surface a "please configure" status.
+// Scans nearby WiFi networks and securely POSTs the BSSIDs
+// to Google's Geolocation API to resolve latitude/longitude.
+// Coordinates are cached in NVS to preserve API quota if the
+// device reboots without moving.
 // ============================================================
 bool refreshLocation() {
     Preferences prefs;
-    prefs.begin("quake-app", true);  // read-only — never wear-levels unnecessarily
+    prefs.begin("quake-app", false); 
 
-    const float lat = prefs.getFloat("lat", 0.0f);
-    const float lon = prefs.getFloat("lon", 0.0f);
+    float lat = prefs.getFloat("lat", 0.0f);
+    float lon = prefs.getFloat("lon", 0.0f);
 
-    prefs.end();
+    // If we already have coordinates from a previous run, use them to save Quota
+    if (lat != 0.0f && lon != 0.0f) {
+        setLocationTextAndCoordinates("Community Node", lat, lon);
+        Serial.printf("Location loaded from NVS cache: %.6f, %.6f\n", lat, lon);
+        prefs.end();
+        return true;
+    }
 
-    if (lat == 0.0f && lon == 0.0f) {
+    Serial.println("No location in NVS. Scanning WiFi to auto-locate...");
+    
+    // 1. Scan nearby networks
+    int numNetworks = WiFi.scanNetworks(false, true); // Async=false, showHidden=true
+    if (numNetworks < 2) {
+        Serial.println("Not enough WiFi networks nearby to triangulate location.");
         setLocationStatusUnknown();
-        clearLocationCoordinates();
-        Serial.println(
-            "No location stored in NVS. "
-            "Connect to the 'Quake-Setup' portal and tap 'Use This Device's GPS'."
-        );
+        prefs.end();
         return false;
     }
 
-    // The label "Community Node" is intentionally generic: it avoids
-    // leaking suburb/street data to anyone inspecting the MQTT broker.
-    setLocationTextAndCoordinates("Community Node", lat, lon);
+    // 2. Build Google API JSON Payload
+    DynamicJsonDocument doc(4096);
+    doc["considerIp"] = "false";
+    JsonArray wifiAccessPoints = doc.createNestedArray("wifiAccessPoints");
+    
+    // Only send the top 15 strongest networks to save memory and bandwidth
+    int maxNets = (numNetworks > 15) ? 15 : numNetworks;
+    for (int i = 0; i < maxNets; i++) {
+        JsonObject ap = wifiAccessPoints.createNestedObject();
+        ap["macAddress"] = WiFi.BSSIDstr(i);
+        ap["signalStrength"] = WiFi.RSSI(i);
+        // Do not include SSID to maximize privacy
+    }
+    WiFi.scanDelete();
 
-    Serial.printf(
-        "Location loaded from NVS: %.6f, %.6f\n",
-        static_cast<double>(lat),
-        static_cast<double>(lon)
-    );
-    return true;
+    String jsonPayload;
+    serializeJson(doc, jsonPayload);
+
+    // 3. Make the API Call
+    HTTPClient http;
+    String url = String("https://www.googleapis.com/geolocation/v1/geolocate?key=") + SECRET_GOOGLE_API_KEY;
+    
+    http.begin(url);
+    http.addHeader("Content-Type", "application/json");
+    
+    Serial.println("Requesting coordinates from Google Geolocation API...");
+    int httpResponseCode = http.POST(jsonPayload);
+
+    if (httpResponseCode == 200) {
+        String response = http.getString();
+        
+        DynamicJsonDocument jsonResponse(1024);
+        DeserializationError error = deserializeJson(jsonResponse, response);
+        
+        if (!error) {
+            lat = jsonResponse["location"]["lat"];
+            lon = jsonResponse["location"]["lng"];
+            
+            // Save to NVS so we don't spam the API on every boot
+            prefs.putFloat("lat", lat);
+            prefs.putFloat("lon", lon);
+            
+            setLocationTextAndCoordinates("Community Node", lat, lon);
+            Serial.printf("Auto-Geolocation Successful: %.6f, %.6f\n", lat, lon);
+            
+            prefs.end();
+            http.end();
+            return true;
+        }
+    } else {
+        Serial.printf("Geolocation API error: %d\n", httpResponseCode);
+        Serial.println(http.getString());
+    }
+    
+    setLocationStatusUnknown();
+    prefs.end();
+    http.end();
+    return false;
 }
 
 // ============================================================
