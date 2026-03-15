@@ -12,6 +12,10 @@
 #include <esp_task_wdt.h>
 #include <math.h>
 
+static float baselineEMA = 0.0f;
+static float sta = 0.0f;
+static float lta = MIN_LTA_CLAMP;
+
 // Ensure Arduino LED define exists in this translation unit too
 #ifndef LED_BUILTIN
 #define LED_BUILTIN LED_BUILTIN_PIN
@@ -105,15 +109,13 @@ void processSensorData() {
         return;
     }
 
+    if (mpu.dmpGetCurrentFIFOPacket(FIFOBuffer) == 0) {
         mpuErrorCounter++;
         if (mpuErrorCounter > MPU_ERROR_THRESHOLD_NOTIF) {
             Serial.println("MPU read errors exceeded threshold. Resetting FIFO...");
             mpu.resetFIFO();
             
             // Critical fix: reset STA/LTA variables so mathematical algorithms don't glitch 
-            extern float sta;
-            extern float lta;
-            extern float baselineEMA;
             sta = 0.0f;
             lta = MIN_LTA_CLAMP;
             baselineEMA = 0.0f;
@@ -145,7 +147,6 @@ void processSensorData() {
     // BASELINE_ALPHA is intentionally very small (0.005) so this EMA tracks
     // only the slow-moving gravity component and long-term sensor drift,
     // NOT the rapid accelerations of a seismic event.
-    static float baselineEMA = 0.0f;
     baselineEMA = (BASELINE_ALPHA * vectorMagnitude) + ((1.0f - BASELINE_ALPHA) * baselineEMA);
 
     // correctedMagnitude is gravity-free; all downstream detection uses this.
@@ -163,9 +164,6 @@ void processSensorData() {
     // LTA is frozen while eventInProgress is true so that the earthquake
     // energy itself does not inflate the noise floor estimate, which would
     // prematurely lower the STA/LTA ratio and detrigger the event early.
-    static float sta = 0.0f;
-    static float lta = MIN_LTA_CLAMP;  // pre-loaded to clamp value for safe first ratio
-
     sta = (STA_ALPHA * correctedMagnitude) + ((1.0f - STA_ALPHA) * sta);
     if (!eventInProgress) {
         lta = (LTA_ALPHA * correctedMagnitude) + ((1.0f - LTA_ALPHA) * lta);

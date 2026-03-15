@@ -25,6 +25,7 @@
 #include <string.h>
 #include <time.h>
 #include <HTTPClient.h>
+#include "secrets.h"
 
 // ============================================================
 // Internal helpers (anonymous namespace — translation-unit scope)
