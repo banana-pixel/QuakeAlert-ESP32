@@ -191,10 +191,10 @@ void checkNtpSync() {
 }
 
 // ============================================================
-// refreshLocation — Auto-Geolocation via Google APIs
+// refreshLocation — Auto-Geolocation via Mozilla Location Service
 //
 // Scans nearby WiFi networks and securely POSTs the BSSIDs
-// to Google's Geolocation API to resolve latitude/longitude.
+// to Mozilla's Free Geolocation API to resolve latitude/longitude.
 // Coordinates are cached in NVS to preserve API quota if the
 // device reboots without moving.
 // ============================================================
@@ -224,7 +224,7 @@ bool refreshLocation() {
         return false;
     }
 
-    // 2. Build Google API JSON Payload
+    // 2. Build Mozilla API JSON Payload
     DynamicJsonDocument doc(4096);
     doc["considerIp"] = "false";
     JsonArray wifiAccessPoints = doc.createNestedArray("wifiAccessPoints");
@@ -242,14 +242,15 @@ bool refreshLocation() {
     String jsonPayload;
     serializeJson(doc, jsonPayload);
 
-    // 3. Make the API Call
+    // 3. Make the API Call to Free Mozilla Location Service
     HTTPClient http;
-    String url = String("https://www.googleapis.com/geolocation/v1/geolocate?key=") + SECRET_GOOGLE_API_KEY;
+    // Using the free tier "test" API key provided by Mozilla for community projects.
+    String url = "https://location.services.mozilla.com/v1/geolocate?key=test";
     
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     
-    Serial.println("Requesting coordinates from Google Geolocation API...");
+    Serial.println("Requesting coordinates from Mozilla Geolocation API...");
     int httpResponseCode = http.POST(jsonPayload);
 
     if (httpResponseCode == 200) {
