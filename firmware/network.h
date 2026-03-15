@@ -5,10 +5,13 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
+#include <Arduino.h>
+
 void initWifi();
+bool maintainWifiConnection();
 void checkNtpSync();
-void getLokasi();
-void handleNetworkTasks();
+bool refreshLocation();
+void networkMaintenanceTask(void* pvParameters);
 void sendHeartbeat();
 
 #endif  // NETWORK_H

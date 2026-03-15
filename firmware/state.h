@@ -9,7 +9,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <PubSubClient.h>
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include "config.h"
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -36,9 +36,11 @@ extern const int daylightOffset_sec;
 // ========================================
 extern MPU6050 mpu;
 extern TaskHandle_t SensorTask;
-extern WiFiClient espClient;
+extern TaskHandle_t NetworkMaintenanceTask;
+extern WiFiClientSecure espClient;
 extern PubSubClient mqttClient;
 extern SemaphoreHandle_t i2cMutex;
+extern SemaphoreHandle_t mpuInterruptSemaphore;
 
 // ========================================
 // STRUCTURES
@@ -52,19 +54,18 @@ struct EventReport {
 };
 
 // ========================================
-// MUTEXES
+// MUTEXES / CRITICAL SECTIONS
 // ========================================
 extern portMUX_TYPE reportMux;
 extern portMUX_TYPE eventTriggerMux;
+extern SemaphoreHandle_t stateMutex;
 
 // ========================================
 // VOLATILE / SYNC STATE
 // ========================================
 extern volatile EventReport pendingReport;
-extern volatile bool MPUInterrupt;
 extern volatile bool eventTriggered;
 extern volatile bool rebootRequestReceived;
-extern volatile unsigned long lastLoopHeartbeat;
 
 // ========================================
 // SENSOR STATE
@@ -81,8 +82,8 @@ extern VectorFloat gravity;
 // ========================================
 // APP STATE
 // ========================================
-extern String StationID;
-extern String lokasiAlat;
+extern char StationID[STATION_ID_BUFFER_SIZE];
+extern char lokasiAlat[LOCATION_TEXT_BUFFER_SIZE];
 extern bool potentialEvent;
 extern bool eventInProgress;
 extern bool alertSent;
@@ -90,6 +91,7 @@ extern float pga;
 extern bool ledState;
 extern bool isNtpSynced;
 extern bool startupMessageSent;
+extern bool locationResolved;
 
 // ========================================
 // TIMERS
@@ -111,6 +113,7 @@ extern uint32_t mpuOverflowCount;
 extern uint32_t totalEventsDetected;
 extern int mpuErrorCounter;
 extern uint32_t minHeapSeen;
+extern float maxHeapFragmentationSeen;
 extern unsigned long lastHeapCheck;
 extern int bootCount;
 extern Preferences preferences;
@@ -119,22 +122,19 @@ extern Preferences preferences;
 // LAST EVENT INFO
 // ========================================
 extern char lastPgaStr[16];
-extern String lastIntensity;
-extern String lastEventTime;
-
-// ========================================
-// MOVING AVERAGE STATE
-// ========================================
-extern float readings[MOVING_AVERAGE_WINDOW_SIZE];
-extern int readIndex;
-extern float total;
-extern float averageMagnitude;
-extern bool isFirstReading;
+extern char lastIntensity[INTENSITY_TEXT_BUFFER_SIZE];
+extern char lastEventTime[TIME_TEXT_BUFFER_SIZE];
 
 // ========================================
 // GEO
 // ========================================
 extern float stationLat;
 extern float stationLon;
+
+// ========================================
+// NETWORK MAINTENANCE STATE
+// ========================================
+extern uint32_t wifiFailCount;
+extern unsigned long lastLocRetry;
 
 #endif  // STATE_H
