@@ -224,9 +224,9 @@ bool refreshLocation() {
         return false;
     }
 
-    // 2. Build Mozilla API JSON Payload
+    // 2. Build BeaconDB API JSON Payload
     DynamicJsonDocument doc(4096);
-    doc["considerIp"] = "false";
+    doc["considerIp"] = false;
     JsonArray wifiAccessPoints = doc.createNestedArray("wifiAccessPoints");
     
     // Only send the top 15 strongest networks to save memory and bandwidth
@@ -251,7 +251,7 @@ bool refreshLocation() {
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
     
-    Serial.println("Requesting coordinates from Mozilla Geolocation API...");
+    Serial.println("Requesting coordinates from BeaconDB Geolocation API...");
     int httpResponseCode = http.POST(jsonPayload);
 
     if (httpResponseCode == 200) {
