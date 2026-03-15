@@ -191,21 +191,72 @@ void checkNtpSync() {
 }
 
 // ============================================================
-// refreshLocation — Auto-Geolocation via Mozilla Location Service
+// resolveLocationFromIP — IP-based fallback (city-level, ~1-5 km)
 //
-// Scans nearby WiFi networks and securely POSTs the BSSIDs
-// to Mozilla's Free Geolocation API to resolve latitude/longitude.
-// Coordinates are cached in NVS to preserve API quota if the
-// device reboots without moving.
+// Used when WiFi BSSID triangulation returns no results (e.g. the local
+// area has not yet been crowdsourced into BeaconDB).  For a fixed seismic
+// sensor, city-level accuracy is perfectly acceptable.
+// Returns true on success and saves coordinates to NVS.
+// ============================================================
+static bool resolveLocationFromIP(Preferences& prefs, float& lat, float& lon) {
+    HTTPClient http;
+    // https://ipinfo.io/json — completely free, no key required, rate limit 50k/month
+    http.begin("https://ipinfo.io/json");
+    http.addHeader("Accept", "application/json");
+
+    Serial.println("BSSID triangulation failed. Falling back to IP geolocation...");
+    int code = http.GET();
+
+    if (code == 200) {
+        String body = http.getString();
+        DynamicJsonDocument resp(1024);
+        if (!deserializeJson(resp, body)) {
+            // ipinfo returns "loc" as "lat,lng" string, e.g. "-6.2146,106.8451"
+            const char* locStr = resp["loc"];
+            if (locStr != nullptr) {
+                char buf[32];
+                strncpy(buf, locStr, sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+
+                char* comma = strchr(buf, ',');
+                if (comma != nullptr) {
+                    *comma = '\0';
+                    lat = strtof(buf,     nullptr);
+                    lon = strtof(comma+1, nullptr);
+
+                    prefs.putFloat("lat", lat);
+                    prefs.putFloat("lon", lon);
+
+                    Serial.printf("IP Geolocation Successful: %.6f, %.6f\n", lat, lon);
+                    http.end();
+                    return true;
+                }
+            }
+        }
+    }
+
+    Serial.printf("IP Geolocation failed: HTTP %d\n", code);
+    http.end();
+    return false;
+}
+
+// ============================================================
+// refreshLocation — Two-stage Auto-Geolocation
+//
+// Stage 1: BeaconDB BSSID triangulation (precise, no key needed).
+//          Falls through to Stage 2 if the region has no coverage yet.
+// Stage 2: ipinfo.io IP geolocation (city-level, always works).
+// Coordinates are cached to NVS so neither API is hit again until
+// the device is factory-reset.
 // ============================================================
 bool refreshLocation() {
     Preferences prefs;
-    prefs.begin("quake-app", false); 
+    prefs.begin("quake-app", false);
 
     float lat = prefs.getFloat("lat", 0.0f);
     float lon = prefs.getFloat("lon", 0.0f);
 
-    // If we already have coordinates from a previous run, use them to save Quota
+    // Use cached NVS coordinates to avoid spamming remote APIs
     if (lat != 0.0f && lon != 0.0f) {
         setLocationTextAndCoordinates("Community Node", lat, lon);
         Serial.printf("Location loaded from NVS cache: %.6f, %.6f\n", lat, lon);
@@ -213,76 +264,68 @@ bool refreshLocation() {
         return true;
     }
 
-    Serial.println("No location in NVS. Scanning WiFi to auto-locate...");
-    
-    // 1. Scan nearby networks
-    int numNetworks = WiFi.scanNetworks(false, true); // Async=false, showHidden=true
-    if (numNetworks < 2) {
-        Serial.println("Not enough WiFi networks nearby to triangulate location.");
-        setLocationStatusUnknown();
-        prefs.end();
-        return false;
-    }
+    // ---- Stage 1: BSSID Triangulation via BeaconDB ----
+    Serial.println("No location in NVS. Scanning WiFi for BSSID triangulation...");
+    int numNetworks = WiFi.scanNetworks(false, true);
 
-    // 2. Build BeaconDB API JSON Payload
-    DynamicJsonDocument doc(4096);
-    doc["considerIp"] = false;
-    JsonArray wifiAccessPoints = doc.createNestedArray("wifiAccessPoints");
-    
-    // Only send the top 15 strongest networks to save memory and bandwidth
-    int maxNets = (numNetworks > 15) ? 15 : numNetworks;
-    for (int i = 0; i < maxNets; i++) {
-        JsonObject ap = wifiAccessPoints.createNestedObject();
-        ap["macAddress"] = WiFi.BSSIDstr(i);
-        ap["signalStrength"] = WiFi.RSSI(i);
-        // Do not include SSID to maximize privacy
-    }
-    WiFi.scanDelete();
+    if (numNetworks >= 2) {
+        DynamicJsonDocument doc(4096);
+        doc["considerIp"] = false;
+        JsonArray aps = doc.createNestedArray("wifiAccessPoints");
 
-    String jsonPayload;
-    serializeJson(doc, jsonPayload);
-
-    // 3. Make the API Call to Free BeaconDB Location Service
-    HTTPClient http;
-    // BeaconDB is a public-domain drop-in replacement for Mozilla Location Service
-    // It requires no API keys and is permanently free for community use.
-    String url = "https://beacondb.net/v1/geolocate";
-    
-    http.begin(url);
-    http.addHeader("Content-Type", "application/json");
-    
-    Serial.println("Requesting coordinates from BeaconDB Geolocation API...");
-    int httpResponseCode = http.POST(jsonPayload);
-
-    if (httpResponseCode == 200) {
-        String response = http.getString();
-        
-        DynamicJsonDocument jsonResponse(1024);
-        DeserializationError error = deserializeJson(jsonResponse, response);
-        
-        if (!error) {
-            lat = jsonResponse["location"]["lat"];
-            lon = jsonResponse["location"]["lng"];
-            
-            // Save to NVS so we don't spam the API on every boot
-            prefs.putFloat("lat", lat);
-            prefs.putFloat("lon", lon);
-            
-            setLocationTextAndCoordinates("Community Node", lat, lon);
-            Serial.printf("Auto-Geolocation Successful: %.6f, %.6f\n", lat, lon);
-            
-            prefs.end();
-            http.end();
-            return true;
+        int maxNets = (numNetworks > 15) ? 15 : numNetworks;
+        for (int i = 0; i < maxNets; i++) {
+            JsonObject ap = aps.createNestedObject();
+            ap["macAddress"]    = WiFi.BSSIDstr(i);
+            ap["signalStrength"] = WiFi.RSSI(i);
         }
+        WiFi.scanDelete();
+
+        String payload;
+        serializeJson(doc, payload);
+
+        HTTPClient http;
+        http.begin("https://beacondb.net/v1/geolocate");
+        http.addHeader("Content-Type", "application/json");
+
+        Serial.println("Requesting coordinates from BeaconDB...");
+        int code = http.POST(payload);
+
+        if (code == 200) {
+            String body = http.getString();
+            DynamicJsonDocument resp(1024);
+            if (!deserializeJson(resp, body)) {
+                lat = resp["location"]["lat"];
+                lon = resp["location"]["lng"];
+
+                if (lat != 0.0f && lon != 0.0f) {
+                    prefs.putFloat("lat", lat);
+                    prefs.putFloat("lon", lon);
+                    setLocationTextAndCoordinates("Community Node", lat, lon);
+                    Serial.printf("BeaconDB Geolocation OK: %.6f, %.6f\n", lat, lon);
+                    prefs.end();
+                    http.end();
+                    return true;
+                }
+            }
+        } else {
+            Serial.printf("BeaconDB API returned %d (no local coverage, trying IP fallback)\n", code);
+        }
+        http.end();
     } else {
-        Serial.printf("Geolocation API error: %d\n", httpResponseCode);
-        Serial.println(http.getString());
+        WiFi.scanDelete();
+        Serial.println("Not enough nearby networks for BSSID triangulation.");
     }
-    
+
+    // ---- Stage 2: IP-based fallback via ipinfo.io ----
+    if (resolveLocationFromIP(prefs, lat, lon)) {
+        setLocationTextAndCoordinates("Community Node", lat, lon);
+        prefs.end();
+        return true;
+    }
+
     setLocationStatusUnknown();
     prefs.end();
-    http.end();
     return false;
 }
 
