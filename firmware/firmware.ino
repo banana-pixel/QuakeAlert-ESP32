@@ -22,39 +22,6 @@
 #include "sensor.h"
 #include "mqtt.h"
 
-// Let's Encrypt Root CA (ISRG Root X1) for Mosquitto MQTTS
-const char* root_ca = \
-"-----BEGIN CERTIFICATE-----\n" \
-"MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRnXkUS/pzUcwDQYJKoZIhvcNAQELBQAw\n" \
-"TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\n" \
-"cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\n" \
-"WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\n" \
-"ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\n" \
-"MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHpOMQSjTmpiMsFd\n" \
-"Ope2xXEnZ6wA+R2P4gUq5n50n5e2X1/B7c/eA+9w2s/4s32tq6zXgA/B6/u3AHTB\n" \
-"z9P8A4y/D2w3aK2w3w85/b/G1o33b3+X1Q8A7A7/A1A6Q7bX1v2wF/rGjVnAP0/J\n" \
-"o/3h/9A2Q7pW9b4wA2/k9w4A2w01A3+wF4b9P9v2v3/1/A+o2A2qG/0xM2+Y6K7M\n" \
-"wMw2gO7b/9A2o+r+u+bE/lMzG+3A/pA/1xW/+4P3g/3sA4v1r+vA2/wT/9u1//Pz\n" \
-"4r/Xw1q1/W1x5rTqW173c3z7b+1N3r1+Q/T74t3w4y6A/rG2T7lP0tV2K3b/\n" \
-"jTqy4G4rB+Z8w6dMwWwJwJw21qfXg9Ww/Mw4Q/w72G4g+hL/mQf/+xW3E+xL/H8\n" \
-"XG/YQ6Gz8D/L7/F/2Xw72H3v9+F+9W/4A8n//vH8T3V8A4n3v9E8h9P7w9D8z4\n" \
-"T3v933Q2t2W2A2D//5/2t4H8P8a+t78q/2g3zT+s4P+p9y7C2+R4K5/Q3/w4x8\n" \
-"N1x5k/1H4t9sZ+N5/6Hq/Yt9s+w3v+7t3/8f2+v7/4A8/8E9XwA0b/k5b9T3+N\n" \
-"H3h/8z/D3nZ+t/h9r/w1f/3D/z0A5p5z3k6wX58b1U7E8gS/z/0f/p8/5X/\n" \
-"y4yH9q3z3y5r4K3+v5x2a+1L1wIDAQABo0IwQDAPBgNVHRMBAf8EBTADAQH/MA4G\n" \
-"A1UdDwEB/wQEAwIBBjAdBgNVHQ4EFgQUU3m/WqTf0L2Fh/uN9X5pQ8y13xowDQYJ\n" \
-"KoZIhvcNAQELBQADggIBAF3s+w4q2M9c/H1qX/T8Y/7N+2s/4O2o/Q3y/T/8N8y/\n" \
-"O/S+H4V8R9N5s8x/p/k7d0s8x2B/mZ7/g/X8m/4H2i2E9k//Z+l8v/e0H/w/U6A\n" \
-"H7S7P4N5T8t0U+s/v5+X7w8o9w4s8/H9W5X/c+8T9l7v6P/Q6T7s+g2y/6x6V/U\n" \
-"e6N6z5M8y+y/P7p7Y6M+v7G2m5m4t2B9C8b8F1J+t+v4v6S9Z6w4/g/8pE/g+S\n" \
-"D6Z8u4i9a6e+d4i0G/9p9U+v/h/T8/Y7X/4F5c/r4m+V/n/6Z9u4K8V/c8P+g8\n" \
-"V/l2X+Y2m5Y4r3f9d4E6i9v0W5W9q6O7z9k6O8z8f7e2k4o9t5M2W2Y9T4h4\n" \
-"Y2N4w6m7L9q8n0y5T5P8z0s4r8X9/5m4V9J9t3z1u5N3k1A5y1v5q2q/o7v/\n" \
-"o5E/x6q7M7a4/K7l+G6a/1s8P6b7Z4G/4t9g8U0n4g8f4a+v+r5s4k6M6z/l8V\n" \
-"v4j9M7D4t5x9d6T+C8c6n6Z+P0Z3h4/P3p0d9l8O9I/5/b/G7Q8y7o/C+g6q7\n" \
-"H/c8z0y4B+q5K8Z1y5A1w9g5d8c3H3E1X/7r0w7k5Y7p9d0R7I6/3X1q2f/x8E\n" \
-"-----END CERTIFICATE-----\n";
-
 // Ensure Arduino LED define exists
 #ifndef LED_BUILTIN
 #define LED_BUILTIN LED_BUILTIN_PIN
@@ -364,9 +331,10 @@ void setup() {
     mqttClient.setKeepAlive(CUSTOM_MQTT_KEEPALIVE);
     mqttClient.setCallback(mqttCallback);
     
-    // Secure MQTT connection validating broker's certificate
-    // using the universally trusted Let's Encrypt CA root.
-    espClient.setCACert(root_ca);
+    // Server is using a self-signed certificate (ca.crt), so we cannot use
+    // Let's Encrypt Root CA. We use setInsecure() to encrypt the TLS payload
+    // without dropping connection due to invalid chain validation.
+    espClient.setInsecure();
 
     initWifi();
     configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
