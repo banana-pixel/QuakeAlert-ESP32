@@ -242,10 +242,11 @@ bool refreshLocation() {
     String jsonPayload;
     serializeJson(doc, jsonPayload);
 
-    // 3. Make the API Call to Free Mozilla Location Service
+    // 3. Make the API Call to Free BeaconDB Location Service
     HTTPClient http;
-    // Using the free tier "test" API key provided by Mozilla for community projects.
-    String url = "https://location.services.mozilla.com/v1/geolocate?key=test";
+    // BeaconDB is a public-domain drop-in replacement for Mozilla Location Service
+    // It requires no API keys and is permanently free for community use.
+    String url = "https://beacondb.net/v1/geolocate";
     
     http.begin(url);
     http.addHeader("Content-Type", "application/json");
