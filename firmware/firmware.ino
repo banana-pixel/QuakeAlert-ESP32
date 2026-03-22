@@ -10,7 +10,6 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <WiFiManager.h>
 #include <esp_task_wdt.h>
 #include <Preferences.h>
 #include <esp_random.h>
@@ -303,8 +302,7 @@ void setup() {
         prefs.clear();
         prefs.end();
 
-        WiFiManager wm;
-        wm.resetSettings();
+        // Custom WiFi credentials have been erased by prefs.clear()
 
         Serial.println("Factory reset complete. Restarting...");
         delay(1000);
@@ -351,6 +349,8 @@ void setup() {
 void loop() {
     esp_task_wdt_reset();
 
+    handleProvisioningLoop();
+
     monitorHeap();
     checkMqttConnection();
 
@@ -364,8 +364,10 @@ void loop() {
     }
 
     if (rebootRequestReceived) {
-        Serial.println("Remote reboot request received but ignored in uptime-safe mode");
+        Serial.println("Remote reboot request received! Rebooting system in 1s...");
         rebootRequestReceived = false;
+        delay(1000);
+        ESP.restart();
     }
 
     handleAlerts();

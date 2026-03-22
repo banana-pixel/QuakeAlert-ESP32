@@ -17,7 +17,7 @@
 #include "mqtt.h"
 
 #include <WiFi.h>
-#include <WiFiManager.h>
+#include <ESPAsyncWebServer.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <esp_task_wdt.h>
@@ -82,42 +82,93 @@ void clearLocationCoordinates() {
 }  // namespace
 
 // ============================================================
-// initWifi — WiFiManager portal with simple credentials
+// initWifi — ESPAsyncWebServer custom portal
 // ============================================================
+bool isProvisioningMode = false;
+volatile bool apStarted = false;
+volatile bool serverRunning = false;
+AsyncWebServer* configServer = nullptr;
+
 void initWifi() {
-    WiFiManager wm;
-    wm.setConfigPortalTimeout(180);
+    Preferences prefs;
+    prefs.begin("quake-app", false);
+    String ssid = prefs.getString("ssid", "");
+    String pass = prefs.getString("password", "");
+    prefs.end();
 
-    // Static HTML info panel explaining the automated process
-    WiFiManagerParameter portal_info(
-        "<div style='background:#f0f4ff;border-left:4px solid #1fa3ec;"
-                    "padding:12px 14px;margin:10px 0;border-radius:3px;"
-                    "font-size:13px;line-height:1.6;color:#333;'>"
-          "<b>&#128205; Automatic Geolocation Setup</b><br>"
-          "Just connect to your home WiFi. This device will scan "
-          "nearby router signals to determine its location automatically."
-        "</div>"
-    );
-
-    wm.addParameter(&portal_info);
-
-    // If no WiFi credentials exist (or reset button was pushed), start AP
-    bool portalSuccess = wm.autoConnect("Quake-Setup");
-
-    if (!portalSuccess) {
-        Serial.println("WiFiManager connect/portal failed. Continuing in degraded mode.");
-        setLocationStatusWifiDisconnected();
-        clearLocationCoordinates();
+    if (ssid.length() > 0) {
+        Serial.println("Saved WiFi credentials found. Starting in STATION mode.");
+        WiFi.mode(WIFI_STA);
+        WiFi.begin(ssid.c_str(), pass.c_str());
         return;
     }
 
-    Serial.println("WiFi connected.");
+    Serial.println("No WiFi credentials found. Starting in AP mode for provisioning.");
+    
+    WiFi.onEvent([](arduino_event_id_t event, arduino_event_info_t info){
+        apStarted = true;
+    }, ARDUINO_EVENT_WIFI_AP_START);
+    
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("Quake-Setup");
+    isProvisioningMode = true;
+
+    configServer = new AsyncWebServer(80);
+}
+
+void handleProvisioningLoop() {
+    if (apStarted && !serverRunning) {
+        configServer->on("/config", HTTP_POST, [](AsyncWebServerRequest *request){
+            request->send(200, "application/json", "{\"status\":\"success\"}");
+            extern volatile bool rebootRequestReceived;
+            rebootRequestReceived = true;
+        }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
+            static String bodyBuf = "";
+            if (index == 0) bodyBuf = "";
+            
+            for (size_t i = 0; i < len; i++) {
+                bodyBuf += (char)data[i];
+            }
+            
+            if (index + len == total) {
+                DynamicJsonDocument doc(1024);
+                DeserializationError err = deserializeJson(doc, bodyBuf);
+                if (!err) {
+                    Preferences p;
+                    p.begin("quake-app", false);
+                    p.putString("ssid", doc["ssid"] | "");
+                    p.putString("password", doc["password"] | "");
+                    
+                    float lat = doc["lat"] | 0.0f;
+                    float lon = doc["lon"] | 0.0f;
+                    if (lat != 0.0f || lon != 0.0f) {
+                        p.putFloat("lat", lat);
+                        p.putFloat("lon", lon);
+                    }
+                    p.end();
+                    Serial.println("Successfully saved new credentials via /config API.");
+                } else {
+                    Serial.printf("Failed to parse config JSON: %s\n", err.c_str());
+                }
+            }
+        });
+
+        configServer->begin();
+        serverRunning = true;
+        Serial.println("Server started safely in loop context");
+    }
 }
 
 // ============================================================
 // maintainWifiConnection
 // ============================================================
 bool maintainWifiConnection() {
+    extern bool isProvisioningMode;
+    if (isProvisioningMode) {
+        // We are waiting for the API injection; skip connection maintenance logs
+        return false;
+    }
+
     if (WiFi.status() == WL_CONNECTED) {
         if (wifiFailCount > 0) {
             Serial.println("WiFi Recovered!");
@@ -143,7 +194,19 @@ bool maintainWifiConnection() {
         Serial.println("WiFi Hard Reset...");
         WiFi.disconnect();
         vTaskDelay(pdMS_TO_TICKS(NETWORK_RECOVERY_DELAY_MS));
-        WiFi.reconnect();
+        
+        // Use custom preferences connection string to safely hard reset without
+        // relying strictly on the active WiFi struct cache.
+        Preferences p;
+        p.begin("quake-app", true);
+        String s = p.getString("ssid", "");
+        String pw = p.getString("password", "");
+        p.end();
+        if (s.length() > 0) {
+            WiFi.begin(s.c_str(), pw.c_str());
+        } else {
+            WiFi.reconnect();
+        }
     }
 
     setLocationStatusWifiDisconnected();

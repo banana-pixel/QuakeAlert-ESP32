@@ -13,5 +13,6 @@ void checkNtpSync();
 bool refreshLocation();
 void networkMaintenanceTask(void* pvParameters);
 void sendHeartbeat();
+void handleProvisioningLoop();
 
 #endif  // NETWORK_H
