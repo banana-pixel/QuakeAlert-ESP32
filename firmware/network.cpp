@@ -17,7 +17,7 @@
 #include "mqtt.h"
 
 #include <WiFi.h>
-#include <ESPAsyncWebServer.h>
+#include <WebServer.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
 #include <esp_task_wdt.h>
@@ -85,9 +85,7 @@ void clearLocationCoordinates() {
 // initWifi — ESPAsyncWebServer custom portal
 // ============================================================
 bool isProvisioningMode = false;
-volatile bool apStarted = false;
-volatile bool serverRunning = false;
-AsyncWebServer* configServer = nullptr;
+WebServer* configServer = nullptr;
 
 void initWifi() {
     Preferences prefs;
@@ -104,58 +102,84 @@ void initWifi() {
     }
 
     Serial.println("No WiFi credentials found. Starting in AP mode for provisioning.");
-    
-    WiFi.onEvent([](arduino_event_id_t event, arduino_event_info_t info){
-        apStarted = true;
-    }, ARDUINO_EVENT_WIFI_AP_START);
-    
     WiFi.mode(WIFI_AP);
-    WiFi.softAP("Quake-Setup");
+    WiFi.softAP("QuakeSetup");
     isProvisioningMode = true;
 
-    configServer = new AsyncWebServer(80);
+    configServer = new WebServer(80);
+    
+    configServer->on("/config", HTTP_POST, []() {
+        if (configServer->hasArg("plain")) {
+            String body = configServer->arg("plain");
+            DynamicJsonDocument doc(1024);
+            DeserializationError err = deserializeJson(doc, body);
+            if (!err) {
+                Preferences p;
+                p.begin("quake-app", false);
+                p.putString("ssid", doc["ssid"] | "");
+                p.putString("password", doc["password"] | "");
+                
+                float lat = doc["lat"] | 0.0f;
+                float lon = doc["lon"] | 0.0f;
+                if (lat != 0.0f || lon != 0.0f) {
+                    p.putFloat("lat", lat);
+                    p.putFloat("lon", lon);
+                }
+                p.end();
+                
+                configServer->send(200, "application/json", "{\"status\":\"success\"}");
+                Serial.println("Successfully saved new credentials via /config API.");
+                extern volatile bool rebootRequestReceived;
+                rebootRequestReceived = true;
+            } else {
+                configServer->send(400, "application/json", "{\"status\":\"error\"}");
+                Serial.printf("Failed to parse config JSON: %s\n", err.c_str());
+            }
+        } else {
+            configServer->send(400, "application/json", "{\"status\":\"error\"}");
+        }
+    });
+
+    configServer->on("/scan", HTTP_GET, []() {
+        Serial.println("Starting WiFi scan...");
+        WiFi.mode(WIFI_AP_STA);
+        int n = WiFi.scanNetworks();
+        DynamicJsonDocument doc(2048);
+        JsonArray array = doc.to<JsonArray>();
+        
+        if (n > 0) {
+            for (int i = 0; i < n; ++i) {
+                String currentSSID = WiFi.SSID(i);
+                if (currentSSID.length() > 0) {
+                    bool duplicate = false;
+                    for (JsonVariant v : array) {
+                        if (v.as<String>() == currentSSID) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!duplicate && currentSSID != "QuakeSetup") {
+                        array.add(currentSSID);
+                    }
+                }
+            }
+        }
+        
+        String jsonString;
+        serializeJson(doc, jsonString);
+        configServer->send(200, "application/json", jsonString);
+        WiFi.scanDelete();
+        WiFi.mode(WIFI_AP);
+        Serial.println("WiFi scan complete & results sent.");
+    });
+
+    configServer->begin();
+    Serial.println("Synchronous WebServer started successfully (tcp_alloc core-lock safe)");
 }
 
 void handleProvisioningLoop() {
-    if (apStarted && !serverRunning) {
-        configServer->on("/config", HTTP_POST, [](AsyncWebServerRequest *request){
-            request->send(200, "application/json", "{\"status\":\"success\"}");
-            extern volatile bool rebootRequestReceived;
-            rebootRequestReceived = true;
-        }, NULL, [](AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total){
-            static String bodyBuf = "";
-            if (index == 0) bodyBuf = "";
-            
-            for (size_t i = 0; i < len; i++) {
-                bodyBuf += (char)data[i];
-            }
-            
-            if (index + len == total) {
-                DynamicJsonDocument doc(1024);
-                DeserializationError err = deserializeJson(doc, bodyBuf);
-                if (!err) {
-                    Preferences p;
-                    p.begin("quake-app", false);
-                    p.putString("ssid", doc["ssid"] | "");
-                    p.putString("password", doc["password"] | "");
-                    
-                    float lat = doc["lat"] | 0.0f;
-                    float lon = doc["lon"] | 0.0f;
-                    if (lat != 0.0f || lon != 0.0f) {
-                        p.putFloat("lat", lat);
-                        p.putFloat("lon", lon);
-                    }
-                    p.end();
-                    Serial.println("Successfully saved new credentials via /config API.");
-                } else {
-                    Serial.printf("Failed to parse config JSON: %s\n", err.c_str());
-                }
-            }
-        });
-
-        configServer->begin();
-        serverRunning = true;
-        Serial.println("Server started safely in loop context");
+    if (isProvisioningMode && configServer != nullptr) {
+        configServer->handleClient();
     }
 }
 
