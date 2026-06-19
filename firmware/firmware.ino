@@ -332,6 +332,7 @@ void setup() {
     // Server is using a self-signed certificate (ca.crt), so we cannot use
     // Let's Encrypt Root CA. We use setInsecure() to encrypt the TLS payload
     // without dropping connection due to invalid chain validation.
+    // Skip certificate chain validation — still fully encrypts the TLS session
     espClient.setInsecure();
 
     initWifi();
