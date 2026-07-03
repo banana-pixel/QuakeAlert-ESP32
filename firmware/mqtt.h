@@ -15,6 +15,8 @@ bool sendMqttReport(const char* lokasi,
                     const char* pgaText,
                     const char* intensitas);
 void sendMqttStartupMessage();
+// Spec §2.1 — QoS-0 health beacon published every HEARTBEAT_INTERVAL_MS
+void sendHeartbeat();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void checkMqttConnection();
 

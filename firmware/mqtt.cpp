@@ -13,6 +13,7 @@
 #include <ArduinoJson.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 namespace {
 // Truncate a coordinate to 2 decimal places, creating a ~1.1 km anonymity box.
@@ -150,6 +151,57 @@ bool sendMqttReport(const char* lokasi,
 
     Serial.println("Report Publish Failed!");
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// sendHeartbeat — Architecture Spec §2.1 / seismo/heartbeat (QoS 0)
+// Payload: { id, version, lat, lon, lokasi, pga, rssi, uptime }
+// All fields strictly match the architecture specification so the server's
+// clustering engine and station-health endpoint can parse them without
+// any field-name translation.
+// ---------------------------------------------------------------------------
+void sendHeartbeat() {
+    if (!mqttClient.connected()) {
+        return;
+    }
+
+    char stationId[STATION_ID_BUFFER_SIZE];
+    char lokasi[LOCATION_TEXT_BUFFER_SIZE];
+    getStationIdCopy(stationId, sizeof(stationId));
+    getLokasiAlatCopy(lokasi, sizeof(lokasi));
+
+    // Use real (unmasked) coordinates for the heartbeat so the server can
+    // geo-locate the station accurately. The spec §2.2 shows full precision.
+    char latStr[16];
+    char lonStr[16];
+    snprintf(latStr, sizeof(latStr), "%.4f", stationLat);
+    snprintf(lonStr, sizeof(lonStr), "%.4f", stationLon);
+
+    // Current noise-floor PGA from the last sensor sample (gal)
+    char pgaStr[16];
+    snprintf(pgaStr, sizeof(pgaStr), "%.4f", sta); // STA ≈ current baseline activity
+
+    const unsigned long uptimeSec = millis() / 1000UL;
+    const long rssi = WiFi.RSSI();
+
+    StaticJsonDocument<MQTT_HEARTBEAT_JSON_CAPACITY> doc;
+    doc["id"]      = stationId;          // matches spec field name
+    doc["version"] = FIRMWARE_VERSION;
+    doc["lat"]     = latStr;
+    doc["lon"]     = lonStr;
+    doc["lokasi"]  = lokasi;
+    doc["pga"]     = pgaStr;
+    doc["rssi"]    = (int)rssi;
+    doc["uptime"]  = (unsigned long)uptimeSec;
+
+    char jsonBuffer[MQTT_HEARTBEAT_BUFFER_SIZE];
+    size_t jsonLength = 0;
+    if (!serializeDocToBuffer(doc, jsonBuffer, sizeof(jsonBuffer), jsonLength)) {
+        return;
+    }
+
+    // QoS 0 — fire-and-forget, consistent with the spec table
+    mqttClient.publish(MQTT_TOPIC_HEARTBEAT, reinterpret_cast<const uint8_t*>(jsonBuffer), jsonLength, false);
 }
 
 void sendMqttStartupMessage() {
@@ -290,6 +342,26 @@ void checkMqttConnection() {
 
     char clientId[40];
     snprintf(clientId, sizeof(clientId), "%s%04X", MQTT_CLIENT_ID_PREFIX, static_cast<unsigned int>(random(0x10000)));
+
+    // --- Last Will & Testament (seismo/status / QoS 1) ---
+    // Spec §2.1: LWT is published automatically by the broker if the sensor
+    // disconnects unexpectedly, so the server marks the station offline.
+    char stationId[STATION_ID_BUFFER_SIZE];
+    getStationIdCopy(stationId, sizeof(stationId));
+
+    StaticJsonDocument<256> lwtDoc;
+    lwtDoc["id"]     = stationId;
+    lwtDoc["status"] = "offline";
+    char lwtBuffer[256];
+    size_t lwtLen = serializeJson(lwtDoc, lwtBuffer, sizeof(lwtBuffer));
+
+    mqttClient.setWill(
+        MQTT_TOPIC_STATUS,
+        reinterpret_cast<const uint8_t*>(lwtBuffer),
+        lwtLen,
+        /*retained=*/false,
+        /*qos=*/1
+    );
 
     if (mqttClient.connect(clientId, mqtt_user, mqtt_password)) {
         mqttClient.subscribe(MQTT_TOPIC_COMMAND);

@@ -12,7 +12,7 @@
 // 1. SYSTEM CONFIGURATION
 // ========================================
 #define WDT_TIMEOUT 30
-#define FIRMWARE_VERSION "6.9.6"
+#define FIRMWARE_VERSION "7.0.0"
 
 #define BOOT_SETTLING_TIME_MS 15000
 #define MAX_FRAGMENTATION_PERCENT 50.0f
@@ -36,10 +36,12 @@
 // 3. MQTT CONFIGURATION
 // ========================================
 #define CUSTOM_MQTT_KEEPALIVE 15
-#define MQTT_TOPIC_ALERT   "seismo/alert"
-#define MQTT_TOPIC_REPORT  "seismo/report"
-#define MQTT_TOPIC_COMMAND "seismo/command"
-#define MQTT_TOPIC_STATUS  "seismo/status"
+#define MQTT_TOPIC_ALERT     "seismo/alert"
+#define MQTT_TOPIC_REPORT    "seismo/report"
+#define MQTT_TOPIC_COMMAND   "seismo/command"
+#define MQTT_TOPIC_STATUS    "seismo/status"
+// QoS-0 health beacon published every HEARTBEAT_INTERVAL_MS (see §2.1 of arch spec)
+#define MQTT_TOPIC_HEARTBEAT "seismo/heartbeat"
 #define MQTT_CLIENT_ID_PREFIX "ESP32-Seismo-"
 
 // ========================================
